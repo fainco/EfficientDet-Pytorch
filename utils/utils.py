@@ -173,11 +173,27 @@ def replace_w_sync_bn(m):
     for var_name, children in m.named_children():
         replace_w_sync_bn(children)
 
-
+# nn.parallel.DistributedDataParallel 比 nn.DataParallel速度快数倍。
 class CustomDataParallel(nn.DataParallel):
     """
     force splitting data to all gpus instead of sending all data to cuda:0 and then moving around.
+
+    nn.DataParallel: => forward
+    # 分发：将输入数据根据其第一个维度(通常就是 batch 大小)划分多份，并传送到多个 GPU 上；
+    inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
+    if len(self.device_ids) == 1:
+        return self.module(*inputs[0], **kwargs[0])
+    
+    # 复制：将模型拷贝到多个 GPU 上。
+    replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
+    
+    # 并行应用，将分发的输入数据应用到拷贝的多个模型上
+    outputs = self.parallel_apply(replicas, inputs, kwargs)
+    
+    # 收集(Gather)：从多个 GPU 上传送回来的数据，再次连接回一起；
+    return self.gather(outputs, self.output_device)
     """
+
 
     def __init__(self, module, num_gpus):
         super().__init__(module)
@@ -188,7 +204,7 @@ class CustomDataParallel(nn.DataParallel):
         # that no scatter is necessary, and there's no need to shuffle stuff around different GPUs.
         devices = ['cuda:' + str(x) for x in range(self.num_gpus)]
         splits = inputs[0].shape[0] // self.num_gpus
-
+        # 这个第一维度是什么内容
         return [(inputs[0][splits * device_idx: splits * (device_idx + 1)].to(f'cuda:{device_idx}', non_blocking=True),
                  inputs[1][splits * device_idx: splits * (device_idx + 1)].to(f'cuda:{device_idx}', non_blocking=True))
                 for device_idx in range(len(devices))], \

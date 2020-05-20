@@ -75,7 +75,7 @@ def evaluate_coco(img_path, set_name, image_ids, coco, model, threshold=0.05):
         else:
             x = x.float()
 
-        x = x.unsqueeze(0).permute(0, 3, 1, 2)
+        x = x.unsqueeze(0).permute(0, 3, 1, 2) # (n,c,w,h)
         features, regression, classification, anchors = model(x)
 
         preds = postprocess(x,

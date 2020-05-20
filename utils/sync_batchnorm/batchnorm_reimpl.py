@@ -46,14 +46,17 @@ class BatchNorm2dReimpl(nn.Module):
         init.zeros_(self.bias)
 
     def forward(self, input_):
+        # 不明白方差这么计算的目的，难道快一些吗。
+        # 通过我简单的测试来看，确实快。int类型有9倍的差距。浮点类型变快不明显。
+        
         batchsize, channels, height, width = input_.size()
         numel = batchsize * height * width
         input_ = input_.permute(1, 0, 2, 3).contiguous().view(channels, numel)
-        sum_ = input_.sum(1)
-        sum_of_square = input_.pow(2).sum(1)
-        mean = sum_ / numel
+        sum_ = input_.sum(1) # 每个通道内所有特征点的总和
+        sum_of_square = input_.pow(2).sum(1) # input_ * input_
+        mean = sum_ / numel # 每个通道内所有特征点的平均值
         sumvar = sum_of_square - sum_ * mean
-
+        
         self.running_mean = (
                 (1 - self.momentum) * self.running_mean
                 + self.momentum * mean.detach()

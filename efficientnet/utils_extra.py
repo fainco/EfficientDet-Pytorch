@@ -5,11 +5,19 @@ import math
 from torch import nn
 import torch.nn.functional as F
 
+"""
+假设是128x128的feature map，用vaild padding，舍弃边缘和角落，那么影响的数据点为128*4-4，508个，对原map的信息丢失率为508/（128*128）≈ 3.1%。
+同样的方法，当feature map只有6x6的时候，信息丢失率则是55.6%。
+所以我们可以看出来，same padding在小feature map上是必要的，否则将会丢失将近过半的信息！
+
+接下来就对卷积和池化分别做了SamePadding的实现。
+"""
 
 class Conv2dStaticSamePadding(nn.Module):
     """
     created by Zylo117
     The real keras/tensorflow conv2d with same padding
+    卷积的时候进行padding部分的操作。
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, bias=True, groups=1, dilation=1, **kwargs):
@@ -56,6 +64,7 @@ class MaxPool2dStaticSamePadding(nn.Module):
     """
     created by Zylo117
     The real keras/tensorflow MaxPool2d with same padding
+    池化的时候进行padding部分的操作
     """
 
     def __init__(self, *args, **kwargs):
@@ -64,6 +73,10 @@ class MaxPool2dStaticSamePadding(nn.Module):
         self.stride = self.pool.stride
         self.kernel_size = self.pool.kernel_size
 
+        # 为什么要扩充成2个 int => [int,int] 和 [int] => [int,int]
+        # 是因为，传入的值可能会是stride=[1,3],第0维1步滑动，第1维3步滑动，
+        # 同理，kernel_size也有[1,3]这样窗口大小的核。
+        # 所以padding的时候，要根据两个维度的大小分别计算需要padding的数值。
         if isinstance(self.stride, int):
             self.stride = [self.stride] * 2
         elif len(self.stride) == 1:
@@ -91,6 +104,8 @@ class MaxPool2dStaticSamePadding(nn.Module):
         bottom = extra_v - top
 
         x = F.pad(x, [left, right, top, bottom])
+        # [left, right, top, bottom]：传入四元素tuple(pad_l, pad_r, pad_t, pad_b)，
+		# 指的是（左填充，右填充，上填充，下填充），其数值代表填充次数
 
         x = self.pool(x)
         return x

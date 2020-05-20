@@ -12,7 +12,7 @@ import yaml
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from efficientdet.dataset import CocoDataset, Resizer, Normalizer, Augmenter, collater
+from efficientdet.dataset import CocoDataset, Resizer, Normalizer, Augmenter, collater, Random
 from backbone import EfficientDetBackbone
 from tensorboardX import SummaryWriter
 import numpy as np
@@ -21,6 +21,7 @@ from tqdm.autonotebook import tqdm
 from efficientdet.loss import FocalLoss
 from utils.sync_batchnorm import patch_replication_callback
 from utils.utils import replace_w_sync_bn, CustomDataParallel, get_last_weights, init_weights
+
 
 
 class Params:
@@ -169,7 +170,7 @@ def train(opt):
     # by packing all mini-batch across all gpus as one batch and normalize, then send it back to all gpus.
     # but it would also slow down the training by a little bit.
     if params.num_gpus > 1 and opt.batch_size // params.num_gpus < 4:
-        model.apply(replace_w_sync_bn)
+        model.apply(replace_w_sync_bn) # 递归调用apply中的函数,将model中的所有子模块作为参数传进去按照replace_w_sync_bn处理。
         use_sync_bn = True
     else:
         use_sync_bn = False
@@ -185,7 +186,7 @@ def train(opt):
             model = CustomDataParallel(model, params.num_gpus)
             if use_sync_bn:
                 patch_replication_callback(model)
-
+    
     if opt.optim == 'adamw':
         optimizer = torch.optim.AdamW(model.parameters(), opt.lr)
     else:
